@@ -1,7 +1,7 @@
 [project]
-name = "crewai"
+name = "crewai-thinkos"
 dynamic = ["version"]
-description = "Cutting-edge framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks."
+description = "CrewAI fork with ThinkOS token storage integration. A cutting-edge framework for orchestrating role-playing, autonomous AI agents with secure API key management."
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 authors = [
@@ -43,9 +43,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://crewai.com"
-Documentation = "https://docs.crewai.com"
-Repository = "https://github.com/crewAIInc/crewAI"
+Homepage = "https://github.com/Ai-Layer-Labs/crewai-thinkos"
+Documentation = "https://github.com/Ai-Layer-Labs/crewai-thinkos"
+Repository = "https://github.com/Ai-Layer-Labs/crewai-thinkos"
 
 [project.optional-dependencies]
 tools = ["crewai-tools~=0.59.0"]
