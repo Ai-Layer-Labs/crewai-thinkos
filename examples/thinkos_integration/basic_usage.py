@@ -1,44 +1,51 @@
-"""Example: Using CrewAI with ThinkOS Token Storage"""
+"""Example: Using CrewAI with ThinkOS Token Storage - REAL INTEGRATION"""
 import asyncio
+import sys
+import os
+
+# Add ThinkOS backend to path
+sys.path.append(os.path.join(os.path.dirname(__file__), '../../../../backend'))
+
 from crewai import Agent, Task, Crew
 from crewai.llm.factory import LLMFactory
-
-# This would come from your ThinkOS backend
-class MockTokenManager:
-    """Mock token manager for example"""
-    async def get_token(self, key: str):
-        # In real usage, this connects to your token storage
-        tokens = {
-            "llm_provider_openai_api_key": "sk-mock-key",
-            "llm_provider_anthropic_api_key": "sk-ant-mock-key"
-        }
-        if key in tokens:
-            return type('TokenInfo', (), {'token': tokens[key]})()
-        return None
+from services.llm.token_manager import get_token_manager
 
 async def create_crew_with_tokens():
-    # Initialize your token manager
-    token_manager = MockTokenManager()
+    # Get the REAL token manager - no mocks!
+    token_manager = await get_token_manager()
     
     # Create LLM factory with token manager
     llm_factory = LLMFactory(token_manager)
     
-    # Create agents with custom LLMs
-    researcher = Agent(
-        role="Senior Research Analyst",
-        goal="Uncover cutting-edge developments in AI",
-        backstory="You're a seasoned researcher with a knack for uncovering the latest developments in AI.",
-        llm=llm_factory.create_llm(provider="openai", model="gpt-4"),
-        verbose=True
-    )
+    # IMPORTANT: Before running this example, you must:
+    # 1. Have the ThinkOS LLM service running
+    # 2. Store your API keys via the token management API:
+    #    curl -X POST http://localhost:8000/api/v1/tokens/store \
+    #      -H "Content-Type: application/json" \
+    #      -d '{"service": "llm_provider_openai_api_key", "token": "sk-...", "token_type": "api-key"}'
     
-    writer = Agent(
-        role="Tech Content Strategist",
-        goal="Craft compelling content about AI developments",
-        backstory="You're a renowned content strategist known for creating engaging narratives around tech topics.",
-        llm=llm_factory.create_llm(provider="anthropic", model="claude-3-opus-20240229"),
-        verbose=True
-    )
+    try:
+        # Create agents with custom LLMs - will fail if tokens not stored!
+        researcher = Agent(
+            role="Senior Research Analyst",
+            goal="Uncover cutting-edge developments in AI",
+            backstory="You're a seasoned researcher with a knack for uncovering the latest developments in AI.",
+            llm=llm_factory.create_llm(provider="openai", model="gpt-4"),
+            verbose=True
+        )
+        
+        writer = Agent(
+            role="Tech Content Strategist",
+            goal="Craft compelling content about AI developments",
+            backstory="You're a renowned content strategist known for creating engaging narratives around tech topics.",
+            llm=llm_factory.create_llm(provider="anthropic", model="claude-3-opus-20240229"),
+            verbose=True
+        )
+    except ValueError as e:
+        print(f"\n❌ ERROR: {e}")
+        print("\n💡 Make sure you've stored your API keys using the token management API!")
+        print("   See the comments above for the exact curl command.")
+        return None
     
     # Create tasks
     research_task = Task(
@@ -66,7 +73,10 @@ async def create_crew_with_tokens():
 if __name__ == "__main__":
     # Run the example
     result = asyncio.run(create_crew_with_tokens())
-    print("\n" + "="*50)
-    print("FINAL RESULT:")
-    print("="*50)
-    print(result)
+    if result:
+        print("\n" + "="*50)
+        print("FINAL RESULT:")
+        print("="*50)
+        print(result)
+    else:
+        print("\n⚠️  Example failed. Please check the prerequisites above.")
