@@ -48,6 +48,7 @@ from crewai.utilities.events.knowledge_events import (
 from crewai.utilities.llm_utils import create_llm
 from crewai.utilities.token_counter_callback import TokenCalcHandler
 from crewai.utilities.training_handler import CrewTrainingHandler
+from crewai.integrations.llm_factory import LLMFactory
 
 
 class Agent(BaseAgent):
@@ -167,6 +168,9 @@ class Agent(BaseAgent):
     guardrail_max_retries: int = Field(
         default=3, description="Maximum number of retries when guardrail fails"
     )
+    token_manager: Optional[Any] = Field(
+        default=None, description="Token manager for secure API key storage"
+    )
 
     @model_validator(mode="before")
     def validate_from_repository(cls, v):
@@ -178,11 +182,58 @@ class Agent(BaseAgent):
     def post_init_setup(self):
         self.agent_ops_agent_name = self.role
 
-        self.llm = create_llm(self.llm)
+        # Use token manager if available
+        if self.token_manager:
+            llm_factory = LLMFactory(self.token_manager)
+            if isinstance(self.llm, str):
+                # Parse provider and model from string
+                provider = "openai"  # default
+                model = self.llm
+                if "/" in self.llm:
+                    provider = self.llm.split("/")[0]
+                    model = self.llm.split("/")[1]
+                elif self.llm.startswith("gpt"):
+                    provider = "openai"
+                elif self.llm.startswith("claude"):
+                    provider = "anthropic"
+                self.llm = llm_factory.create_llm(provider=provider, model=model)
+            elif not isinstance(self.llm, BaseLLM):
+                # For non-string LLM configurations, require token manager
+                raise ValueError(
+                    "Token manager is required for LLM creation. "
+                    "Please provide a token_manager parameter to the Agent. "
+                    "Environment variables are not supported for security reasons."
+                )
+        else:
+            # No token manager - require explicit LLM instance
+            if not isinstance(self.llm, BaseLLM):
+                raise ValueError(
+                    "Without token_manager, you must provide an already initialized LLM instance. "
+                    "String-based LLM configuration requires token_manager for secure API key access."
+                )
+            
         if self.function_calling_llm and not isinstance(
             self.function_calling_llm, BaseLLM
         ):
-            self.function_calling_llm = create_llm(self.function_calling_llm)
+            # Apply same logic to function_calling_llm
+            if self.token_manager and isinstance(self.function_calling_llm, str):
+                llm_factory = LLMFactory(self.token_manager)
+                provider = "openai"  # default
+                model = self.function_calling_llm
+                if "/" in self.function_calling_llm:
+                    provider = self.function_calling_llm.split("/")[0]
+                    model = self.function_calling_llm.split("/")[1]
+                elif self.function_calling_llm.startswith("gpt"):
+                    provider = "openai"
+                elif self.function_calling_llm.startswith("claude"):
+                    provider = "anthropic"
+                self.function_calling_llm = llm_factory.create_llm(provider=provider, model=model)
+            else:
+                # Non-string function_calling_llm requires token manager
+                raise ValueError(
+                    "Token manager is required for function_calling_llm creation. "
+                    "Environment variables are not supported for security reasons."
+                )
 
         if not self.agent_executor:
             self._setup_agent_executor()

@@ -1,6 +1,7 @@
 """LLM Factory with Token Storage Support"""
 from typing import Optional, Any, Dict
 from crewai.integrations.token_storage import TokenStorageIntegration
+from crewai.llm import LLM
 
 class LLMFactory:
     """Factory for creating LLMs with token storage support"""
@@ -27,30 +28,34 @@ class LLMFactory:
                 f"POST /api/v1/tokens/store with service='llm_provider_{provider}_api_key'"
             )
         
-        # Import providers dynamically to avoid dependencies
+        # Create LLM instance with the API key from token storage
+        # CrewAI's LLM class will handle the provider-specific initialization
+        
+        # Model must be explicitly specified
+        if not model:
+            raise ValueError(
+                f"Model must be specified for provider '{provider}'. "
+                f"No default models are assumed. "
+                f"Examples: 'gpt-4', 'claude-3-opus-20240229', 'mixtral-8x7b-32768'"
+            )
+        
+        # Build the model string for CrewAI's LLM class
         if provider == "openai":
-            from langchain_openai import ChatOpenAI
-            return ChatOpenAI(
-                model=model or "gpt-4",
-                api_key=api_key,
-                **(config or {}),
-                **kwargs
-            )
+            model_str = model
         elif provider == "anthropic":
-            from langchain_anthropic import ChatAnthropic
-            return ChatAnthropic(
-                model=model or "claude-3-opus-20240229",
-                anthropic_api_key=api_key,
-                **(config or {}),
-                **kwargs
-            )
+            model_str = f"anthropic/{model}"
         elif provider == "groq":
-            from langchain_groq import ChatGroq
-            return ChatGroq(
-                model=model or "mixtral-8x7b-32768",
-                groq_api_key=api_key,
-                **(config or {}),
-                **kwargs
-            )
+            model_str = f"groq/{model}"
+        elif provider == "openrouter":
+            # OpenRouter models are already in the correct format
+            model_str = model
         else:
             raise ValueError(f"Unknown provider: {provider}")
+        
+        # Create and return CrewAI LLM instance
+        return LLM(
+            model=model_str,
+            api_key=api_key,
+            **(config or {}),
+            **kwargs
+        )

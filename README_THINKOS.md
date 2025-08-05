@@ -2,51 +2,107 @@
 
 This is a customized fork of CrewAI that integrates with ThinkOS's unified token storage system.
 
-## Key Modifications
+## 🔒 Key Security Features
 
-1. **Token Storage Integration**: All LLM API keys are retrieved from ThinkOS's secure token storage. **NO ENVIRONMENT VARIABLES**.
+1. **Zero Environment Variables**: All LLM API keys are retrieved from ThinkOS's secure token storage. **NO ENVIRONMENT VARIABLES, NO EXCEPTIONS**.
 
-2. **LLM Factory**: A new factory pattern for creating LLM instances with automatic token retrieval from secure storage only.
+2. **Secure Token Management**: All tokens are encrypted and stored in a secure database - never in code or environment.
 
-3. **No Fallbacks**: This fork enforces secure token storage - environment variables are NOT supported.
+3. **No Fallbacks**: This fork enforces secure token storage with zero tolerance for environment variable usage.
 
-## Installation
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
-# Build from source
-pip install -e .
-
-# Or install built package
-pip install dist/crewai_thinkos-*.whl
+# Build and install from source
+cd crewai-thinkos
+python -m build
+python -m pip install dist/crewai_thinkos-*.whl
 ```
 
-## Usage
+### Usage with ThinkOSCrew Wrapper (Recommended)
 
 ```python
-from crewai import Agent, Task, Crew
-from crewai.llm.factory import LLMFactory
-from your_app.token_manager import get_token_manager
+from backend.agents import ThinkOSCrew
 
-# Get your token manager
-token_manager = await get_token_manager()
+# Initialize with automatic token management
+crew = ThinkOSCrew()
+await crew.initialize()
 
-# Create LLM factory
-llm_factory = LLMFactory(token_manager)
-
-# Create agents with token-managed LLMs
-agent = Agent(
+# Create agents with database-driven configuration
+agent = crew.create_agent(
     role="Researcher",
-    goal="Research topics",
-    llm=llm_factory.create_llm(provider="openai", model="gpt-4")
+    goal="Research complex topics",
+    agent_type="researcher"  # Auto-configures from database!
+)
+
+# Or specify model explicitly
+agent = crew.create_agent(
+    role="Analyst",
+    goal="Analyze data",
+    llm_provider="openai",
+    llm_model="gpt-4"  # No defaults - must be explicit
 )
 ```
 
-## Differences from Upstream
+### Low-Level Usage (Direct CrewAI)
 
-- Added `src/crewai/integrations/token_storage.py`
-- Added `src/crewai/llm/factory.py`
-- Modified package name to `crewai-thinkos`
-- Added ThinkOS integration examples
+```python
+from crewai import Agent, Task, Crew
+from backend.services.llm.token_manager import get_token_manager
+
+# Token manager is required - no exceptions
+token_manager = await get_token_manager()
+
+# Create agent with token manager
+agent = Agent(
+    role="Researcher",
+    goal="Research topics",
+    token_manager=token_manager,  # Required!
+    llm_provider="openai",
+    llm_model="gpt-4"
+)
+```
+
+## 📁 Key Modifications
+
+### Added Files
+- `src/crewai/integrations/token_storage.py` - Token storage integration
+- `src/crewai/integrations/llm_factory.py` - LLM factory with secure token retrieval
+- `backend/agents/thinkos_crew.py` - High-level wrapper with full CrewAI features
+- `backend/agents/model_config_manager.py` - Database-driven model configuration
+
+### Modified Core Components
+- `src/crewai/agent.py` - Added mandatory `token_manager` parameter
+- `src/crewai/crew.py` - Added mandatory `token_manager` parameter
+- `src/crewai/utilities/llm_utils.py` - Removed all environment variable support
+- Package name changed to `crewai-thinkos`
+
+## 🔧 Database-Driven Configuration
+
+Models can be configured in the application_settings table:
+
+```python
+# Import configurations
+python scripts/manage_model_configs.py import examples/model_configs.json
+
+# List configurations
+python scripts/manage_model_configs.py list
+
+# Use in code
+agent = crew.create_agent(
+    role="Planner",
+    goal="Strategic planning",
+    agent_type="planner"  # Uses database configuration
+)
+```
+
+## 📚 Documentation
+
+- [ThinkOSCrew Guide](../docs/THINKOS_CREW_GUIDE.md) - Complete wrapper documentation
+- [Database Configuration](../docs/THINKOS_CREW_DATABASE_CONFIG.md) - Model configuration guide
+- [Security Overview](../docs/CREWAI_SECURITY.md) - Security implementation details
 
 ## Syncing with Upstream
 

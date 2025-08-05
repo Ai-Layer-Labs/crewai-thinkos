@@ -75,7 +75,7 @@ from crewai.utilities.events.llm_events import (
     LLMCallStartedEvent,
     LLMCallType,
 )
-from crewai.utilities.llm_utils import create_llm
+from crewai.integrations.llm_factory import LLMFactory
 from crewai.utilities.printer import Printer
 from crewai.utilities.token_counter_callback import TokenCalcHandler
 from crewai.utilities.tool_utils import execute_tool_and_check_finality
@@ -184,6 +184,9 @@ class LiteAgent(FlowTrackable, BaseModel):
     guardrail_max_retries: int = Field(
         default=3, description="Maximum number of retries when guardrail fails"
     )
+    token_manager: Optional[Any] = Field(
+        default=None, description="Token manager for secure API key storage"
+    )
 
     # State and Results
     tools_results: List[Dict[str, Any]] = Field(
@@ -208,9 +211,35 @@ class LiteAgent(FlowTrackable, BaseModel):
     @model_validator(mode="after")
     def setup_llm(self):
         """Set up the LLM and other components after initialization."""
-        self.llm = create_llm(self.llm)
-        if not isinstance(self.llm, BaseLLM):
-            raise ValueError(f"Expected LLM instance of type BaseLLM, got {type(self.llm).__name__}")
+        # Use token manager if available
+        if self.token_manager:
+            llm_factory = LLMFactory(self.token_manager)
+            if isinstance(self.llm, str):
+                # Parse provider and model from string
+                provider = "openai"  # default
+                model = self.llm
+                if "/" in self.llm:
+                    provider = self.llm.split("/")[0]
+                    model = self.llm.split("/")[1]
+                elif self.llm.startswith("gpt"):
+                    provider = "openai"
+                elif self.llm.startswith("claude"):
+                    provider = "anthropic"
+                self.llm = llm_factory.create_llm(provider=provider, model=model)
+            elif not isinstance(self.llm, BaseLLM):
+                # For non-string LLM configurations, require token manager
+                raise ValueError(
+                    "Token manager is required for LLM creation. "
+                    "Please provide a token_manager parameter to the LiteAgent. "
+                    "Environment variables are not supported for security reasons."
+                )
+        else:
+            # No token manager - require explicit LLM instance
+            if not isinstance(self.llm, BaseLLM):
+                raise ValueError(
+                    "Without token_manager, you must provide an already initialized LLM instance. "
+                    "String-based LLM configuration requires token_manager for secure API key access."
+                )
 
         # Initialize callbacks
         token_callback = TokenCalcHandler(token_cost_process=self._token_process)

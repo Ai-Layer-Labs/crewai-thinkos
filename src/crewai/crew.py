@@ -77,7 +77,6 @@ from crewai.utilities.formatter import (
     aggregate_raw_outputs_from_task_outputs,
     aggregate_raw_outputs_from_tasks,
 )
-from crewai.utilities.llm_utils import create_llm
 from crewai.utilities.planning_handler import CrewPlanner
 from crewai.utilities.task_output_storage_handler import TaskOutputStorageHandler
 from crewai.utilities.training_handler import CrewTrainingHandler
@@ -249,6 +248,10 @@ class Crew(FlowTrackable, BaseModel):
         default_factory=SecurityConfig,
         description="Security configuration for the crew, including fingerprinting.",
     )
+    token_manager: Optional[Any] = Field(
+        default=None,
+        description="Token manager for secure API key storage to be passed to all agents.",
+    )
 
     @field_validator("id", mode="before")
     @classmethod
@@ -287,7 +290,26 @@ class Crew(FlowTrackable, BaseModel):
             self._file_handler = FileHandler(self.output_log_file)
         self._rpm_controller = RPMController(max_rpm=self.max_rpm, logger=self._logger)
         if self.function_calling_llm and not isinstance(self.function_calling_llm, LLM):
-            self.function_calling_llm = create_llm(self.function_calling_llm)
+            if self.token_manager:
+                from crewai.integrations.llm_factory import LLMFactory
+                llm_factory = LLMFactory(self.token_manager)
+                if isinstance(self.function_calling_llm, str):
+                    provider = "openai"  # default
+                    model = self.function_calling_llm
+                    if "/" in self.function_calling_llm:
+                        provider = self.function_calling_llm.split("/")[0]
+                        model = self.function_calling_llm.split("/")[1]
+                    self.function_calling_llm = llm_factory.create_llm(provider=provider, model=model)
+                else:
+                    raise ValueError(
+                        "Token manager is required for function_calling_llm creation. "
+                        "Environment variables are not supported."
+                    )
+            else:
+                raise ValueError(
+                    "Token manager is required for function_calling_llm. "
+                    "Please provide token_manager to Crew."
+                )
 
         return self
 
@@ -653,6 +675,11 @@ class Crew(FlowTrackable, BaseModel):
                 # type: ignore[attr-defined] # Argument 1 to "_interpolate_inputs" of "Crew" has incompatible type "dict[str, Any] | None"; expected "dict[str, Any]"
                 agent.crew = self  # type: ignore[attr-defined]
                 agent.set_knowledge(crew_embedder=self.embedder)
+                
+                # Pass token manager to agent if available
+                if self.token_manager and hasattr(agent, 'token_manager'):
+                    agent.token_manager = self.token_manager
+                
                 # TODO: Create an AgentFunctionCalling protocol for future refactoring
                 if not agent.function_calling_llm:  # type: ignore # "BaseAgent" has no attribute "function_calling_llm"
                     agent.function_calling_llm = self.function_calling_llm  # type: ignore # "BaseAgent" has no attribute "function_calling_llm"
@@ -796,7 +823,26 @@ class Crew(FlowTrackable, BaseModel):
                 manager.tools = []
                 raise Exception("Manager agent should not have tools")
         else:
-            self.manager_llm = create_llm(self.manager_llm)
+            if self.token_manager:
+                from crewai.integrations.llm_factory import LLMFactory
+                llm_factory = LLMFactory(self.token_manager)
+                if isinstance(self.manager_llm, str):
+                    provider = "openai"  # default
+                    model = self.manager_llm
+                    if "/" in self.manager_llm:
+                        provider = self.manager_llm.split("/")[0]
+                        model = self.manager_llm.split("/")[1]
+                    self.manager_llm = llm_factory.create_llm(provider=provider, model=model)
+                elif not isinstance(self.manager_llm, BaseLLM):
+                    raise ValueError(
+                        "Token manager is required for manager_llm creation. "
+                        "Environment variables are not supported."
+                    )
+            else:
+                raise ValueError(
+                    "Token manager is required for manager_llm. "
+                    "Please provide token_manager to Crew."
+                )
             manager = Agent(
                 role=i18n.retrieve("hierarchical_manager_agent", "role"),
                 goal=i18n.retrieve("hierarchical_manager_agent", "goal"),
@@ -805,6 +851,7 @@ class Crew(FlowTrackable, BaseModel):
                 allow_delegation=True,
                 llm=self.manager_llm,
                 verbose=self.verbose,
+                token_manager=self.token_manager,
             )
             self.manager_agent = manager
         manager.crew = self
@@ -1318,7 +1365,22 @@ class Crew(FlowTrackable, BaseModel):
         """Test and evaluate the Crew with the given inputs for n iterations concurrently using concurrent.futures."""
         try:
             # Create LLM instance and ensure it's of type LLM for CrewEvaluator
-            llm_instance = create_llm(eval_llm)
+            if isinstance(eval_llm, str):
+                if not self.token_manager:
+                    raise ValueError(
+                        "Token manager is required for test() with string eval_llm. "
+                        "Provide token_manager to Crew or pass an initialized LLM instance."
+                    )
+                from crewai.integrations.llm_factory import LLMFactory
+                llm_factory = LLMFactory(self.token_manager)
+                provider = "openai"  # default
+                model = eval_llm
+                if "/" in eval_llm:
+                    provider = eval_llm.split("/")[0]
+                    model = eval_llm.split("/")[1]
+                llm_instance = llm_factory.create_llm(provider=provider, model=model)
+            else:
+                llm_instance = eval_llm
             if not llm_instance:
                 raise ValueError("Failed to create LLM instance.")
 
