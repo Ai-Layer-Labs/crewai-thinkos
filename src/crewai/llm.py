@@ -410,6 +410,14 @@ class LLM(BaseLLM):
             **self.additional_params,
         }
 
+        # Derive provider for litellm from hierarchical model string only if not explicitly set
+        # Do not override custom_llm_provider set by factory; only infer if missing and infer to known litellm aliases
+        if not params.get("custom_llm_provider") and "/" in self.model:
+            inferred = self.model.split("/", 1)[0]
+            alias_map = {
+                "google": "gemini",
+            }
+            params["custom_llm_provider"] = alias_map.get(inferred, inferred)
         # Remove None values from params
         return {k: v for k, v in params.items() if v is not None}
 

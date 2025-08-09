@@ -186,12 +186,14 @@ class Agent(BaseAgent):
         if self.token_manager:
             llm_factory = LLMFactory(self.token_manager)
             if isinstance(self.llm, str):
-                # Parse provider and model from string
+                # Parse provider and model from string in the hierarchy:
+                # api_provider/model_provider/model_name OR provider/model OR bare model
                 provider = "openai"  # default
                 model = self.llm
                 if "/" in self.llm:
-                    provider = self.llm.split("/")[0]
-                    model = self.llm.split("/")[1]
+                    first, rest = self.llm.split("/", 1)
+                    provider = first  # e.g., openrouter, openai, anthropic, groq, google
+                    model = rest      # e.g., openai/gpt-5-chat or gpt-4o
                 elif self.llm.startswith("gpt"):
                     provider = "openai"
                 elif self.llm.startswith("claude"):

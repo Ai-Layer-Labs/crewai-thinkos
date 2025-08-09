@@ -12,8 +12,8 @@ class LLMFactory:
     def create_llm(
         self,
         provider: str = "openai",
-        model: str = None,
-        config: Dict[str, Any] = None,
+        model: str | None = None,
+        config: Dict[str, Any] | None = None,
         **kwargs
     ) -> Any:
         """Create LLM instance with token from storage"""
@@ -39,23 +39,32 @@ class LLMFactory:
                 f"Examples: 'gpt-4', 'claude-3-opus-20240229', 'mixtral-8x7b-32768'"
             )
         
-        # Build the model string for CrewAI's LLM class
-        if provider == "openai":
-            model_str = model
-        elif provider == "anthropic":
-            model_str = f"anthropic/{model}"
-        elif provider == "groq":
-            model_str = f"groq/{model}"
-        elif provider == "openrouter":
-            # OpenRouter models are already in the correct format
+        # Normalize hierarchy api_provider > model_provider > model_name
+        # - If model already contains '/', pass through untouched (e.g., "openai/gpt-5-chat" or "google/gemini-2.5-flash")
+        # - Else prefix with provider when needed
+        if model is None:
+            raise ValueError("Model must be specified")
+
+        if "/" in model:
             model_str = model
         else:
-            raise ValueError(f"Unknown provider: {provider}")
+            # Bare model name; prefix for non-openai
+            if provider in {"openai"}:
+                model_str = model
+            elif provider in {"anthropic", "groq", "mistral", "google", "gemini"}:
+                # Allow both google and gemini aliases
+                pfx = "gemini" if provider == "google" else provider
+                model_str = f"{pfx}/{model}"
+            elif provider == "openrouter":
+                # openrouter with bare model is ambiguous; pass through
+                model_str = model
+            else:
+                model_str = f"{provider}/{model}"
         
         # Create and return CrewAI LLM instance
-        return LLM(
-            model=model_str,
-            api_key=api_key,
-            **(config or {}),
-            **kwargs
-        )
+        # Pass explicit API provider for litellm
+        additional = {"custom_llm_provider": provider}
+        if config:
+            additional.update(config)
+        additional.update(kwargs)
+        return LLM(model=model_str, api_key=api_key, **additional)
