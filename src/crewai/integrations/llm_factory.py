@@ -56,8 +56,10 @@ class LLMFactory:
                 pfx = "gemini" if provider == "google" else provider
                 model_str = f"{pfx}/{model}"
             elif provider == "openrouter":
-                # openrouter with bare model is ambiguous; pass through
-                model_str = model
+                # Require fully-qualified upstream model to avoid ambiguity
+                raise ValueError(
+                    "OpenRouter models must be fully-qualified like 'openai/gpt-4o' or 'anthropic/claude-3.5'."
+                )
             else:
                 model_str = f"{provider}/{model}"
         
